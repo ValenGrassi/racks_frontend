@@ -1,159 +1,155 @@
-"use client"
+import { AlertTriangle, Zap } from "lucide-react"
+import { Meter } from "@/components/ui/meter"
+import { MetricStrip, Panel, PanelHeader } from "@/components/ui/panel"
+import { StatusTag } from "@/components/ui/status"
+import { batteryMonthsLeft, totalPowerW, totalUpsVA, upsAutonomyHours, upsLoadPercent } from "@/lib/calculations"
+import { TONES, autonomyTone, batteryTone, formatNumber, loadTone, toDateInput } from "@/lib/rack"
+import { cn } from "@/lib/utils"
+import type { Cinema } from "@/types/cinema"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
-import { Zap, Battery, Clock, AlertTriangle, Thermometer, ServerCrash } from 'lucide-react'
-import { Cinema } from '../types/cinema'
-import { calculateTotalKva, calculateTotalPowerConsumption, calculateUPSAutonomy, getUPSLoadPercentage } from '../utils/power-calculations'
+const NETWORK_TYPES = ["switch", "router", "firewall"]
 
-interface PowerConsumptionCardProps {
-  cinema: Cinema
-}
-
-
-export function PowerConsumptionCard({ cinema }: PowerConsumptionCardProps) {
-  const upsComponents = cinema.rackComponents.filter(c => c.type === 'ups')
-  const upsCapacity = calculateTotalKva(cinema.rackComponents)
-  const loadPercentage = getUPSLoadPercentage(calculateTotalPowerConsumption(cinema.rackComponents), upsCapacity)
-  const autonomyHours = calculateUPSAutonomy(cinema.rackComponents)
-
-  const getLoadColor = (percentage: number) => {
-    if (percentage > 80) return 'text-red-600'
-    if (percentage > 60) return 'text-yellow-600'
-    return 'text-green-600'
-  }
-
-  const getAutonomyColor = (hours: number) => {
-    if (hours < 1) return 'text-red-600'
-    if (hours < 2) return 'text-yellow-600'
-    return 'text-green-600'
-  }
+/** Resumen de energía para el encabezado de la vista del rack. Calculado con los datos cargados (no en vivo). */
+export function EnergyOverview({ cinema }: { cinema: Cinema }) {
+  const components = cinema.rackComponents
+  const totalW = totalPowerW(components)
+  const load = upsLoadPercent(components)
+  const autonomy = upsAutonomyHours(components)
+  const upsCount = components.filter((c) => c.type === "ups").length
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Zap className="h-5 w-5 text-yellow-600" />
-          Consumo y Autonomía Energética
-        </CardTitle>
-        <CardDescription>Análisis de consumo eléctrico y autonomía UPS</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Consumo Total */}
-        
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Consumo Total del Rack</span>
-            <span className="text-lg font-bold text-blue-600">{calculateTotalPowerConsumption(cinema.rackComponents)}W</span>
-          </div>
-          <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
-            <div className="text-center">
-              <div className="font-medium">Servidores</div>
-              <div>{cinema.rackComponents.filter(c => c.type === 'server').reduce((sum, c) => sum + c.powerConsumption, 0)}W</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium">Red</div>
-              <div>{cinema.rackComponents.filter(c => ['switch', 'router', 'firewall'].includes(c.type)).reduce((sum, c) => sum + c.powerConsumption, 0)}W</div>
-            </div>
-            <div className="text-center">
-              <div className="font-medium">Otros</div>
-              <div>{cinema.rackComponents.filter(c => !['server', 'switch', 'router', 'firewall', 'ups'].includes(c.type)).reduce((sum, c) => sum + c.powerConsumption, 0)}W</div>
-            </div>
-          </div>
-        </div>
+    <MetricStrip
+      items={[
+        { label: "Consumo total", value: formatNumber(totalW), unit: "W", caption: `${components.length} ${components.length === 1 ? "equipo" : "equipos"}` },
+        {
+          label: "Autonomía estimada",
+          value: formatNumber(autonomy),
+          unit: "h",
+          tone: autonomyTone(autonomy),
+          caption: `Con carga actual de ${formatNumber(totalW)} W`,
+        },
+        { label: "Capacidad UPS", value: formatNumber(totalUpsVA(components)), unit: "VA", caption: `${upsCount} ${upsCount === 1 ? "unidad" : "unidades"}` },
+        {
+          label: "Carga de UPS",
+          value: load,
+          unit: "%",
+          tone: loadTone(load),
+          extra: <Meter value={load} tone={loadTone(load)} className="mt-2.5 h-1 max-w-32" />,
+        },
+        // TODO: mostrar el valor real cuando haya un sensor de temperatura conectado
+        {
+          label: "Temperatura del rack",
+          value: <span className="text-[17px] font-normal tracking-normal text-fg-3 sm:text-[19px]">Sin sensor</span>,
+          caption: "Todavía no hay un sensor conectado",
+        },
+      ]}
+    />
+  )
+}
 
-        {/* Capacidad UPS */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Capacidad UPS</span>
-            <span className="text-lg font-bold text-purple-600">{upsCapacity}VA</span>
-          </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span>Carga Actual</span>
-              <span className={`font-medium ${getLoadColor(loadPercentage)}`}>{loadPercentage}%</span>
-            </div>
-            <Progress value={loadPercentage} className="h-2" />
-          </div>
-        </div>
+/** Distribución del consumo por tipo de equipo y advertencias de energía. */
+export function EnergyCard({ cinema }: { cinema: Cinema }) {
+  const components = cinema.rackComponents
+  const totalW = totalPowerW(components)
+  const load = upsLoadPercent(components)
+  const autonomy = upsAutonomyHours(components)
 
-        {/* Autonomía Estimada */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium flex items-center gap-1">
-              <Battery className="h-4 w-4" />
-              Autonomía Estimada
-            </span>
-            <span className={`text-lg font-bold ${getAutonomyColor(autonomyHours)}`}>
-              {autonomyHours}h
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs text-gray-600">
-            <Clock className="h-3 w-3" />
-            <span>Con carga actual de {calculateTotalPowerConsumption(cinema.rackComponents)}W</span>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium flex items-center gap-1">
-              <div className="flex items-center justify-center"><Thermometer className="h-4 w-4" /></div>
-              Temperatura del Rack
-            </span>
-            <span className={`text-lg font-bold text-orange-600 ${getAutonomyColor(autonomyHours)}`}>
-              25ºC
-            </span>
-          </div>          
-        </div>
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium flex items-center gap-1">
-              <div className="flex items-center justify-center"><ServerCrash className="h-4 w-4" /></div>
-              {cinema.generator ? <span className="text-green-600">Tiene generador</span> : <span className="text-red-600">No tiene generador</span>}
-            </span>
-          </div>
-        </div>
+  const breakdown = [
+    { label: "Servidores", color: "bg-chart-1", watts: totalPowerW(components.filter((c) => c.type === "server")) },
+    { label: "Red", color: "bg-chart-2", watts: totalPowerW(components.filter((c) => NETWORK_TYPES.includes(c.type))) },
+    {
+      label: "Otros",
+      color: "bg-chart-3",
+      watts: totalPowerW(components.filter((c) => c.type !== "server" && c.type !== "ups" && !NETWORK_TYPES.includes(c.type))),
+    },
+  ]
 
-        {/* Estado de UPS */}
-        <div className="space-y-3">
-          <h4 className="text-sm font-medium">Estado de UPS</h4>
-          {upsComponents.map((ups) => (
-            <div key={ups.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${
-                  ups.status === 'online' ? 'bg-green-500' : 
-                  ups.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
-                }`} />
-                <span className="text-sm font-medium">{ups.name}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge variant={ups.status === 'online' ? 'default' : 'destructive'} className="text-xs">
-                  {ups.status === 'online' ? 'En Línea' : 
-                   ups.status === 'warning' ? 'Advertencia' : 'Desconectado'}
-                </Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+  return (
+    <Panel className="px-5 py-4 sm:px-6">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[14px] font-semibold tracking-[-0.01em] text-fg">Distribución del consumo</h2>
+        <span className="text-[12.5px] text-fg-3 tabular-nums">{formatNumber(totalW)} W · calculado con los datos del rack</span>
+      </div>
 
-        {/* Alertas */}
-        {(loadPercentage > 50 || autonomyHours < 1) && (
-          <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-md">
-            <AlertTriangle className="h-4 w-4 text-red-600 mt-0.5" />
-            <div className="text-sm">
-              <p className="font-medium text-red-800">Advertencias de Energía:</p>
-              <ul className="text-red-700 mt-1 space-y-1">
-                {loadPercentage > 50 && (
-                  <li>• Carga UPS alta ({loadPercentage}%) - considerar reducir consumo.</li>
+      {(load > 50 || autonomy < 1) && (
+        <div className="mt-3.5 flex gap-2.5 rounded-xl bg-critical-wash px-3.5 py-3 text-critical-ink shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--critical)_25%,transparent)]">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <div className="text-[13px]">
+            <p className="font-medium">Advertencias de energía</p>
+            <ul className="mt-0.5 space-y-0.5 opacity-90">
+              {load > 50 && <li>Carga UPS alta ({load}%): considerar reducir consumo.</li>}
+              {autonomy < 1 && <li>Autonomía baja: considerar agregar baterías.</li>}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 flex h-2 gap-[3px] overflow-hidden rounded-full bg-muted">
+        {totalW > 0 &&
+          breakdown.map(
+            (part) =>
+              part.watts > 0 && (
+                <div key={part.label} className={cn("h-full rounded-full transition-[width] duration-500", part.color)} style={{ width: `${(part.watts / totalW) * 100}%` }} />
+              )
+          )}
+      </div>
+      <ul className="mt-3.5 flex flex-wrap gap-x-7 gap-y-2">
+        {breakdown.map((part) => (
+          <li key={part.label} className="flex items-center gap-2 text-[13px]">
+            <span className={cn("size-2 rounded-full", part.color)} />
+            <span className="text-fg-2">{part.label}</span>
+            <span className="font-medium text-fg tabular-nums">
+              {formatNumber(part.watts)} <span className="font-normal text-fg-3">W</span>
+            </span>
+            {totalW > 0 && <span className="text-[12px] text-fg-4 tabular-nums">{Math.round((part.watts / totalW) * 100)}%</span>}
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  )
+}
+
+/** Unidades UPS del rack con su estado y la vida útil de la batería. */
+export function BatteryCard({ cinema }: { cinema: Cinema }) {
+  const upsList = cinema.rackComponents.filter((c) => c.type === "ups")
+
+  return (
+    <Panel className="overflow-hidden">
+      <PanelHeader icon={<Zap />} title="Baterías UPS" description={`${upsList.length} ${upsList.length === 1 ? "unidad" : "unidades"} · vida útil de 48 meses`} />
+      {upsList.length === 0 ? (
+        <p className="px-5 pb-5 text-[13px] text-fg-4">Sin UPS registrados en este rack.</p>
+      ) : (
+        <ul className="divide-y divide-line border-t border-line">
+          {upsList.map((ups) => {
+            const months = ups.batteryInstallDate ? batteryMonthsLeft(ups.batteryInstallDate) : null
+            const tone = months === null ? "neutral" : batteryTone(months)
+            return (
+              <li key={ups.id} className="px-5 py-3.5">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="min-w-0 truncate text-[13.5px] font-medium text-fg">{ups.name}</span>
+                  <StatusTag status={ups.status} />
+                </div>
+                {months === null ? (
+                  <p className="mt-1.5 text-[12.5px] text-fg-4">Sin fecha de instalación de batería</p>
+                ) : (
+                  <>
+                    <div className="mt-2 flex items-baseline justify-between gap-3">
+                      <span className="text-[12px] text-fg-3">
+                        {ups.capacityVA ? `${formatNumber(ups.capacityVA)} VA · ` : ""}instalada {toDateInput(ups.batteryInstallDate!)}
+                      </span>
+                      <span className={cn("shrink-0 text-[20px] leading-none font-light tracking-[-0.04em] tabular-nums", TONES[tone].text)}>
+                        {months === 0 ? <span className="text-[13px] font-medium tracking-normal whitespace-nowrap">Cambiar baterías</span> : months}
+                        {months > 0 && <span className="ml-1 text-[12px] font-normal tracking-normal text-fg-3">meses</span>}
+                      </span>
+                    </div>
+                    <Meter value={months} max={48} tone={tone} className="mt-2 h-1" />
+                  </>
                 )}
-                {autonomyHours < 1 && (
-                  <li>• Autonomía baja - considerar agregar baterías.</li>
-                )}
-              </ul>
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </Panel>
   )
 }

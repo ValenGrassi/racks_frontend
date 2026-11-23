@@ -1,31 +1,33 @@
-import type { Metadata } from 'next'
-import { GeistSans } from 'geist/font/sans'
-import { GeistMono } from 'geist/font/mono'
-import './globals.css'
+import type { Metadata } from "next"
+import type { ReactNode } from "react"
+import { GeistMono } from "geist/font/mono"
+import { GeistSans } from "geist/font/sans"
+import { ToastProvider } from "@/components/ui/toast"
+import { SessionProvider } from "@/lib/session"
+import { THEME_STORAGE_KEY } from "@/lib/theme"
+import "./globals.css"
 
 export const metadata: Metadata = {
-  title: 'Cinemark Hoyts Racks',
-  description: 'Created by ValenDev',
-  generator: 'Next.js',
+  title: "SAR · Racks de IT · Cinemark Hoyts",
+  description: "Sistema de Autogestión de Racks",
+  generator: "Next.js",
 }
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode
-}>) {
+// Se ejecuta antes de pintar: si el tema guardado es el claro, lo aplica (el oscuro ya viene en el HTML)
+const themeScript = `try{if(localStorage.getItem("${THEME_STORAGE_KEY}")==="light"){var c=document.documentElement.classList;c.remove("dark");c.add("light")}}catch(e){}`
+
+export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    // suppressHydrationWarning: el script de arriba puede cambiar la clase del tema antes de que cargue React
+    <html lang="es" className={`${GeistSans.variable} ${GeistMono.variable} dark`} suppressHydrationWarning>
       <head>
-        <style>{`
-html {
-  font-family: ${GeistSans.style.fontFamily};
-  --font-sans: ${GeistSans.variable};
-  --font-mono: ${GeistMono.variable};
-}
-        `}</style>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body className="min-h-screen">
+        <SessionProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </SessionProvider>
+      </body>
     </html>
   )
 }

@@ -1,394 +1,334 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  AlertTriangle,
-  MapPin,
-  Calendar,
-  Upload,
-  Eye,
-  SquarePen,
-  LayoutGrid,
-  User,
-  LogOut,
-  FileText,
-  LogIn,
-} from "lucide-react"
-import type { Cinema } from "../types/cinema"
-import { ExcelUploader } from "./excel-uploader"
-import { type ExcelCinemaData, convertExcelToRackComponents } from "../utils/excel-parser"
-import { calculateBatteryRemainingLife, isBatteryDueForReplacement } from "@/utils/battery-utils"
+import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { calculateTotalKva, calculateTotalPowerConsumption, calculateUPSAutonomy } from "@/utils/power-calculations"
-import { LoginPage } from "./login-page"
-import { Loader } from "./ui/loading"
+import { AlertTriangle, ChevronRight, CloudOff, PenLine, RotateCw, Search, X } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Meter } from "@/components/ui/meter"
+import { EmptyState, MetricStrip, Skeleton } from "@/components/ui/panel"
+import { Kbd, Tag } from "@/components/ui/status"
+import { batteryMonthsLeft, isBatteryDue, totalPowerW, totalUpsVA, upsAutonomyHours } from "@/lib/calculations"
+import { TONES, autonomyTone, batteryTone, formatDate, formatNumber, hasStatus } from "@/lib/rack"
+import { cn } from "@/lib/utils"
+import type { Cinema, RackComponent } from "@/types/cinema"
+import { PageLayout } from "./page-layout"
 
 interface CinemaListProps {
   cinemas: Cinema[]
-  loggedIn: () => boolean,
-  onSelectCinema: (cinema: Cinema) => void
-  onConfigCinema: (cinema: Cinema) => void
-  onEditCinema: (cinema: Cinema, onConfigCinema?: any) => void
-  onUploadExcel: (file: File, cinemaId?: string) => void
-  onCreateCinema: (cinemaData: Cinema) => void
-  onNavigateToLogs: () => void,
-  onLogin: () => void,
-  onLogout: () => void,
-  isLoading: () => void,
-  user: () => string,
-  password: () => string
+  isLoading: boolean
+  /** Error al cargar las ubicaciones (backend caído, red…) */
+  error?: unknown
+  onEditCinema: (cinema: Cinema) => void
 }
 
-export function CinemaList({
-  user,
-  password,
-  isLoading,
-  cinemas,
-  onLogin,
-  loggedIn,
-  onSelectCinema,
-  onEditCinema,
-  onConfigCinema,
-  onCreateCinema,
-  onNavigateToLogs,
-  onLogout,
-}: CinemaListProps) {
-  const [searchTerm, setSearchTerm] = useState("")
-  const [showUploader, setShowUploader] = useState(false)
+/** Sin tildes y en minúsculas, para buscar "moron" y encontrar "Morón" */
+const normalize = (text: string | null) =>
+  (text ?? "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
 
-  const normalizeText = (text: string) =>
-    text
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
+/** UPS con batería por vencer o que no están en línea */
+const countUpsAlerts = (cinema: Cinema) =>
+  cinema.rackComponents.filter(
+    (c) => c.type === "ups" && ((c.batteryInstallDate && isBatteryDue(c.batteryInstallDate)) || c.status !== "online")
+  ).length
 
-  const filteredCinemas = cinemas
-  .filter(
-    (cinema) =>
-      normalizeText(cinema.name).includes(normalizeText(searchTerm)) ||
-      normalizeText(cinema.location).includes(normalizeText(searchTerm)),
-  )
-  .sort((a, b) => a.name.localeCompare(b.name))
+// Columnas de la tabla en pantallas anchas (debajo de xl cada fila se acomoda en bloques)
+const COLUMNS = "xl:grid-cols-[minmax(0,1.5fr)_minmax(0,1.2fr)_84px_92px_104px_minmax(0,0.9fr)_196px]"
 
-  const handleExcelUploadSuccess = (data: ExcelCinemaData) => {
-    const existingCinema = cinemas.find(
-      (c) =>
-        c.name.toLowerCase() === data.cinemaName.toLowerCase() ||
-        c.location.toLowerCase() === data.location.toLowerCase(),
-    )
+/** Pantalla principal: todas las ubicaciones con el estado resumido de su rack. */
+export function CinemaList({ cinemas, isLoading, error, onEditCinema }: CinemaListProps) {
+  const [search, setSearch] = useState("")
+  const searchRef = useRef<HTMLInputElement>(null)
 
-    const rackComponents = convertExcelToRackComponents(data)
-
-    if (existingCinema) {
-      const updatedCinema: Cinema = {
-        ...existingCinema,
-        name: data.cinemaName,
-        address: data.address,
-        rackComponents,
-        lastUpdated: new Date().toISOString().split("T")[0],
-      }
-      console.log("Updating existing cinema:", updatedCinema)
-      alert(`¡Cine "${data.cinemaName}" actualizado exitosamente!`)
-    } else {
-      const newCinema: Cinema = {
-        id: `cinema-${Date.now()}`,
-        name: data.cinemaName,
-        location: data.location,
-        address: data.address,
-        rackComponents,
-        lastUpdated: new Date().toISOString().split("T")[0],
-      }
-      onCreateCinema(newCinema)
-      alert(`¡Nuevo cine "${data.cinemaName}" creado exitosamente!`)
+  // "/" enfoca el buscador desde cualquier parte de la pantalla
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (e.key !== "/" || target.closest("input, textarea, [contenteditable]")) return
+      e.preventDefault()
+      searchRef.current?.focus()
     }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
-    setShowUploader(false)
-  }
+  const filtered = cinemas
+    .filter((c) => normalize(c.name).includes(normalize(search)) || normalize(c.location).includes(normalize(search)))
+    .sort((a, b) => a.name.localeCompare(b.name))
 
-  const getUPSWarnings = (cinema: Cinema) => {
-    return cinema.rackComponents.filter((component) => {
-      return component.type === "ups" && component.batteryInstallDate && isBatteryDueForReplacement(component.batteryInstallDate) || component.status !== "online" && component.type == "ups"
-    }).length
-  }
+  const allComponents = cinemas.flatMap((c) => c.rackComponents)
+  // Las pacheras no tienen estado: no cuentan en "en línea"
+  const activeComponents = allComponents.filter((c) => hasStatus(c.type))
+  const totalAlerts = cinemas.reduce((sum, c) => sum + countUpsAlerts(c), 0)
 
   return (
-    <div className="space-y-6">
-      {/* Encabezado */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div className="flex gap-10 items-center">
-          <img src="/SAR.png" className="w-44" />
-          {/* <img src="/cinemark-hoyts.png" className="h-20 " /> */}
-        </div>
-        <div className="flex gap-2">
-          {/* <Dialog open={showUploader} onOpenChange={setShowUploader}>
-            <DialogTrigger asChild>
-              <Button className="flex items-center gap-2 cursor-pointer">
-                <Upload className="h-4 w-4" />
-                Cargar Excel
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Importar Datos desde Excel</DialogTitle>
-              </DialogHeader>
-              <ExcelUploader onUploadSuccess={handleExcelUploadSuccess} onClose={() => setShowUploader(false)} />
-            </DialogContent>
-          </Dialog> */}
-
-          {loggedIn ? <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="flex items-center gap-2 cursor-pointer">
-                Menú
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <div className="flex items-center gap-2 p-2">
-                <User className="h-4 w-4" />
-                <div className="flex flex-col">
-                  <span className="text-sm font-medium">Usuario Admin</span>
-                  <span className="text-xs text-gray-500">admin@cinemark.com</span>
-                </div>
-              </div>
-              <DropdownMenuSeparator />
-              {user == "valengrassi7@gmail.com" && password == "123456" && <DropdownMenuItem onClick={onNavigateToLogs} className="cursor-pointer">
-                <FileText className="h-4 w-4 mr-2" />
-                Logs
-              </DropdownMenuItem>}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={onLogout} className="cursor-pointer text-red-600">
-                <LogOut className="h-4 w-4 mr-2" />
-                Salir
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu> : 
-            <Button onClick={onLogin} className="flex items-center gap-2 cursor-pointer">
-              Iniciar Sesión
-              <LogIn className="h-4 w-4" />
-            </Button>}
-        </div>
-      </div>
-      <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ubicaciones de Cines</h1>
-          <p className="text-gray-600 mt-2">Gestiona los racks de servidores en todas las ubicaciones de cines</p>
-        </div>
-
-      {isLoading ? <Loader /> :<>
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-blue-600">{cinemas.length}</div>
-            <div className="text-sm text-gray-600">Total de Cines Cargados</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-green-600">
-              {cinemas.reduce(
-                (acc, cinema) => acc + cinema.rackComponents.filter((c) => c.status === "online").length,
-                0,
-              )}
-            </div>
-            <div className="text-sm text-gray-600">Componentes En Línea</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-red-600">
-              {cinemas.reduce((acc, cinema) => acc + getUPSWarnings(cinema), 0)}
-            </div>
-            <div className="text-sm text-gray-600">Alertas UPS</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold text-purple-600">
-              {cinemas.reduce((acc, cinema) => acc + cinema.rackComponents.filter((c) => c.type === "ups").length, 0)}
-            </div>
-            <div className="text-sm text-gray-600">Total Unidades UPS</div>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="max-w-md">
-        <Input
-          placeholder="Buscar cines por nombre..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+    <PageLayout
+      eyebrow="Infraestructura IT · Cinemark Hoyts"
+      title="Ubicaciones"
+      subtitle="Estado de los racks de servidores en todos los cines."
+      overview={
+        <MetricStrip
+          loading={isLoading}
+          items={[
+            { label: "Cines", value: cinemas.length },
+            {
+              label: "Componentes en línea",
+              value: activeComponents.filter((c) => c.status === "online").length,
+              unit: `de ${activeComponents.length}`,
+            },
+            { label: "Alertas UPS", value: totalAlerts, tone: totalAlerts > 0 ? "critical" : undefined },
+            { label: "Unidades UPS", value: allComponents.filter((c) => c.type === "ups").length },
+          ]}
         />
-      </div>
-      </>}
-
-      {/* Tarjetas de Cines */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredCinemas.map((cinema) => {
-          const upsWarnings = getUPSWarnings(cinema)
-          const upsComponents = cinema.rackComponents.filter((c) => c.type === "ups")
-          const autonomy = calculateUPSAutonomy(cinema.rackComponents)
-
-          return (
-            <Card key={cinema.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      <MapPin className="h-5 w-5 text-gray-500" />
-                      {cinema.name}
-                    </CardTitle>
-                    <CardDescription>{cinema.location}</CardDescription>
-                  </div>
-                  {upsWarnings > 0 && (
-                    <Badge variant="destructive" className="flex items-center gap-1">
-                      <AlertTriangle className="h-3 w-3" />
-                      {upsWarnings} Alerta{upsWarnings > 1 ? "s" : ""} UPS
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="text-sm text-gray-600">
-                  <p>{cinema.address}</p>
-                </div>
-
-                {/* Estado UPS */}
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Estado UPS</h4>
-                  {upsComponents.map((ups) => {
-                    const remainingMonths = ups.batteryInstallDate
-                      ? calculateBatteryRemainingLife(ups.batteryInstallDate)
-                      : null
-                    const isDue = ups.batteryInstallDate
-                      ? isBatteryDueForReplacement(ups.batteryInstallDate)
-                      : false
-
-                    return (
-                      <div key={ups.id} className="flex justify-between items-center text-xs">
-                        <span>{ups.name}</span>
-                        <div className="flex items-center gap-2">
-                          {remainingMonths !== null && remainingMonths !== 0 && (
-                            <span
-                              className={`px-2 py-1 rounded ${
-                                isDue ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
-                              }`}
-                            >
-                              {remainingMonths} meses restantes
-                            </span>
-                          )}
-                          {remainingMonths == 0 && (
-                            <span
-                              className={`px-2 py-1 rounded bg-red-100 text-red-800`}
-                            >
-                              Cambiar baterias
-                            </span>
-                          )}
-                          <div
-                            className={`w-2 h-2 rounded-full ${
-                              remainingMonths !== null && remainingMonths > 12
-                                ? "bg-green-500"
-                                : remainingMonths !== null && remainingMonths < 12 && remainingMonths > 6
-                                ? "bg-yellow-500"
-                                : "bg-red-500"
-                            }`}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                {/* Consumo de Energía */}
-                <div className="space-y-2">
-                  <h4 className="font-medium text-sm">Consumo de Energía</h4>
-                  <div className="flex justify-between items-center text-xs">
-                    <span>Consumo Total:</span>
-                    <span className="font-medium text-blue-600">{calculateTotalPowerConsumption(cinema.rackComponents)}W</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span>Autonomía UPS:</span>
-                    <span
-                      className={`font-medium ${
-                        autonomy < 1
-                          ? "text-red-600"
-                          : autonomy < 2
-                          ? "text-yellow-600"
-                          : "text-green-600"
-                      }`}
-                    >
-                      {autonomy}h
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs">
-                    <span>Capacidad Total UPS:</span>
-                    <span className="font-medium text-purple-600">{calculateTotalKva(cinema.rackComponents)}VA</span>
-                  </div>
-                </div>
-
-                {/* Estadísticas */}
-                <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div>
-                    <div className="font-medium">{cinema.rackComponents.length}</div>
-                    <div className="text-gray-500">Componentes</div>
-                  </div>
-                  <div>
-                    <div className="font-medium">
-                      {cinema.rackComponents.filter((c) => c.status === "online").length}
-                    </div>
-                    <div className="text-gray-500">En Línea</div>
-                  </div>
-                  <div>
-                    <div className="font-medium">{upsComponents.length}</div>
-                    <div className="text-gray-500">Unidades UPS</div>
-                  </div>
-                </div>
-
-                <div className="flex justify-between items-center pt-2 border-t">
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
-                    <Calendar className="h-3 w-3" />
-                    <p>Actualizado {new Date(cinema.lastUpdated).toLocaleDateString('es-ES')}</p>
-                  </div>
-                  <div className="flex flex-col sm:flex-row gap-1">
-                    <Button
-                      size="sm"
-                      onClick={() => onEditCinema(cinema, onConfigCinema)}
-                      className="flex items-center gap-1 cursor-pointer"
-                    >
-                      <SquarePen className="h-3 w-3" />
-                      Editar
-                    </Button>
-                    <Button asChild size="sm" className="flex items-center gap-1 cursor-pointer">
-                      <Link href={`/racks/${cinema.id}`}>
-                        <Eye className="h-3 w-3" />
-                        Ver Rack
-                      </Link>
-                    </Button>
-
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-        
+      }
+    >
+      {/* Búsqueda */}
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <label className="glass relative flex h-11 w-full items-center rounded-xl sm:max-w-[380px]">
+          <span className="sr-only">Buscar</span>
+          <Search className="pointer-events-none absolute left-3.5 size-4 text-fg-3" />
+          <input
+            ref={searchRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => e.key === "Escape" && setSearch("")}
+            placeholder="Buscar por nombre o localidad"
+            className="h-full w-full rounded-xl bg-transparent pr-11 pl-10 text-[14px] text-fg outline-none placeholder:text-fg-3 focus-visible:shadow-[0_0_0_3px_var(--accent-wash)] focus-visible:outline-none"
+          />
+          {search ? (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 rounded-md p-1 text-fg-3 transition-colors hover:bg-muted hover:text-fg"
+              aria-label="Limpiar búsqueda"
+            >
+              <X className="size-3.5" />
+            </button>
+          ) : (
+            <Kbd className="pointer-events-none absolute right-3 hidden sm:inline-flex">/</Kbd>
+          )}
+        </label>
+        {!isLoading && !error && (
+          <p className="text-[13px] text-fg-3 tabular-nums">
+            {filtered.length === cinemas.length ? `${cinemas.length} ubicaciones` : `${filtered.length} de ${cinemas.length} ubicaciones`}
+          </p>
+        )}
       </div>
 
-      {filteredCinemas.length === 0 && !isLoading && (
-        <div className="text-center py-12">
-          <MapPin className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">No se encontraron cines que coincidan con tu búsqueda.</p>
+      {/* Tabla */}
+      <div className="glass overflow-hidden rounded-2xl">
+        <div className={cn("hidden h-12 items-center gap-6 border-b border-line px-6 text-[12.5px] text-fg-3 xl:grid", COLUMNS)}>
+          <span>Ubicación</span>
+          <span>Baterías UPS</span>
+          <span className="text-right">Consumo</span>
+          <span className="text-right">Autonomía</span>
+          <span className="text-right">Capacidad</span>
+          <span>Rack</span>
+          <span aria-hidden />
         </div>
+
+        {isLoading ? (
+          <ListSkeleton />
+        ) : error ? (
+          <EmptyState icon={<CloudOff />} title="No se pudieron cargar las ubicaciones">
+            Revisá la conexión con el servidor y volvé a intentarlo.
+            <div className="mt-5">
+              <Button variant="secondary" size="sm" onClick={() => window.location.reload()}>
+                <RotateCw />
+                Reintentar
+              </Button>
+            </div>
+          </EmptyState>
+        ) : filtered.length === 0 ? (
+          <EmptyState icon={<Search />} title={search ? "Sin resultados" : "Todavía no hay ubicaciones"}>
+            {search ? (
+              <>
+                No hay ubicaciones que coincidan con “{search}”.
+                <div className="mt-5">
+                  <Button variant="secondary" size="sm" onClick={() => setSearch("")}>
+                    Limpiar búsqueda
+                  </Button>
+                </div>
+              </>
+            ) : (
+              "Cuando se carguen cines en el sistema van a aparecer acá."
+            )}
+          </EmptyState>
+        ) : (
+          <ol>
+            {filtered.map((cinema) => (
+              <CinemaRow key={cinema.id} cinema={cinema} onEdit={() => onEditCinema(cinema)} />
+            ))}
+          </ol>
+        )}
+      </div>
+    </PageLayout>
+  )
+}
+
+function CinemaRow({ cinema, onEdit }: { cinema: Cinema; onEdit: () => void }) {
+  const components = cinema.rackComponents
+  const upsList = components.filter((c) => c.type === "ups")
+  const alerts = countUpsAlerts(cinema)
+  const autonomy = upsAutonomyHours(components)
+  const active = components.filter((c) => hasStatus(c.type))
+  const online = active.filter((c) => c.status === "online").length
+  const isEmpty = components.length === 0
+
+  return (
+    <li
+      data-cinema={cinema.id}
+      className={cn(
+        "group relative grid gap-4 border-b border-line px-5 py-4 transition-colors duration-150 last:border-b-0 hover:bg-accent-wash md:grid-cols-2 md:gap-x-10 xl:items-center xl:gap-6 xl:px-6",
+        isEmpty ? "xl:py-3" : "xl:py-4",
+        COLUMNS
       )}
+    >
+      {/* Barra de acento al pasar el mouse */}
+      <span className="absolute inset-y-0 left-0 w-0.5 bg-accent opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+
+      {/* Ubicación: el nombre es un enlace que cubre toda la fila */}
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <Link
+            href={`/racks/${cinema.id}`}
+            className="truncate text-[14.5px] font-semibold tracking-[-0.01em] text-fg outline-none after:absolute after:inset-0 after:content-[''] focus-visible:after:ring-2 focus-visible:after:ring-accent focus-visible:after:ring-inset"
+          >
+            {cinema.name}
+          </Link>
+          {alerts > 0 && (
+            <Tag tone="critical" icon={AlertTriangle} className="shrink-0">
+              {alerts} {alerts > 1 ? "alertas" : "alerta"} UPS
+            </Tag>
+          )}
+          {isEmpty && <Tag className="shrink-0">Rack sin cargar</Tag>}
+        </div>
+        <p className="mt-0.5 truncate text-[12.5px] text-fg-3">{cinema.address}</p>
+      </div>
+
+      {/* Baterías de cada UPS */}
+      <div className="min-w-0">
+        <p className="mb-2 text-[12px] text-fg-3 xl:hidden">Baterías UPS</p>
+        {isEmpty ? (
+          <Empty />
+        ) : upsList.length > 0 ? (
+          <ul className="space-y-2">
+            {upsList.map((ups) => (
+              <BatteryLine key={ups.id} ups={ups} />
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[12.5px] text-fg-4">Sin UPS registrados</p>
+        )}
+      </div>
+
+      {/* Energía: en pantallas anchas cada cifra ocupa su columna; un guion si el rack está vacío */}
+      <dl className="grid grid-cols-3 gap-4 xl:contents">
+        <Metric label="Consumo" value={totalPowerW(components)} unit="W" empty={isEmpty} />
+        <Metric label="Autonomía" value={autonomy} unit="h" toneClass={TONES[autonomyTone(autonomy)].text} empty={isEmpty} />
+        <Metric label="Capacidad" value={totalUpsVA(components)} unit="VA" empty={isEmpty} />
+      </dl>
+
+      {/* Conteos y acciones */}
+      <div className="flex items-center justify-between gap-3 border-t border-line pt-3 md:self-end md:border-t-0 md:pt-0 xl:contents">
+        <div className="min-w-0 text-[12.5px] whitespace-nowrap">
+          <p className={isEmpty ? "text-fg-4" : "text-fg-2"}>
+            {isEmpty ? (
+              "Sin equipos"
+            ) : (
+              <>
+                <span className="tabular-nums">{online}</span> de <span className="tabular-nums">{active.length}</span> en línea
+              </>
+            )}
+          </p>
+          <p className="mt-0.5 text-[12px] text-fg-4">Actualizado {formatDate(cinema.lastUpdated)}</p>
+        </div>
+        <div className="relative z-10 flex shrink-0 justify-end gap-1">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
+            <PenLine />
+            Editar
+          </Button>
+          <Button asChild variant="secondary" size="sm">
+            <Link href={`/racks/${cinema.id}`}>
+              Ver rack
+              <ChevronRight className="text-fg-3 transition-transform duration-150 group-hover:translate-x-0.5" />
+            </Link>
+          </Button>
+        </div>
+      </div>
+    </li>
+  )
+}
+
+function Empty() {
+  return <span className="text-[13px] text-fg-4">—</span>
+}
+
+function Metric({ label, value, unit, toneClass, empty }: { label: string; value: number; unit: string; toneClass?: string; empty?: boolean }) {
+  return (
+    <div className="xl:text-right">
+      <dt className="text-[12px] text-fg-3 xl:sr-only">{label}</dt>
+      <dd className={cn("mt-0.5 text-[14px] font-medium tabular-nums xl:mt-0", empty ? "text-fg-4" : (toneClass ?? "text-fg"))}>
+        {empty ? (
+          "—"
+        ) : (
+          <>
+            {formatNumber(value)}
+            <span className="ml-0.5 text-[12px] font-normal text-fg-3">{unit}</span>
+          </>
+        )}
+      </dd>
+    </div>
+  )
+}
+
+/** Vida restante de la batería de un UPS (48 meses = barra llena) */
+function BatteryLine({ ups }: { ups: RackComponent }) {
+  if (!ups.batteryInstallDate) {
+    return (
+      <li className="flex items-center justify-between gap-3 text-[12.5px]">
+        <span className="truncate text-fg-2">{ups.name}</span>
+        <span className="text-fg-4">Sin fecha</span>
+      </li>
+    )
+  }
+
+  const months = batteryMonthsLeft(ups.batteryInstallDate)
+  const tone = batteryTone(months)
+
+  return (
+    <li className="text-[12.5px]">
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <span className="min-w-0 truncate text-fg-2" title={ups.name}>
+          {ups.name}
+        </span>
+        <span className={cn("shrink-0 font-medium whitespace-nowrap tabular-nums", TONES[tone].text)}>
+          {months === 0 ? "Cambiar baterías" : `${months} meses`}
+        </span>
+      </div>
+      <Meter value={months} max={48} tone={tone} className="h-1" />
+    </li>
+  )
+}
+
+function ListSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Cargando ubicaciones">
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className={cn("grid gap-4 border-b border-line px-6 py-4 last:border-b-0 xl:items-center xl:gap-6", COLUMNS)}>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-44" />
+            <Skeleton className="h-3 w-64 max-w-full" />
+          </div>
+          <Skeleton className="h-3 w-full" />
+          <Skeleton className="hidden h-4 xl:block" />
+          <Skeleton className="hidden h-4 xl:block" />
+          <Skeleton className="hidden h-4 xl:block" />
+          <Skeleton className="hidden h-8 w-28 xl:block" />
+          <Skeleton className="h-8 w-40" />
+        </div>
+      ))}
     </div>
   )
 }

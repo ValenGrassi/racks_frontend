@@ -1,47 +1,32 @@
-import type { Cinema } from "@/types/cinema";
+import type { Cinema, RackComponent } from "@/types/cinema"
 
-async function request<T>(path: string, opts: RequestInit = {}): Promise<T> {
-  const base = "http://192.168.0.197:4000";
-  const url = `${base}${path}`;
-  const response = await fetch(url, {
-    ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...(opts.headers || {}),
-    },
-  });
+/** Backend (API REST, WebSocket y video de cámaras). Se configura en .env */
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000"
+export const WS_URL = API_URL.replace(/^http/, "ws")
 
-  console.log(response)
-
-  // manejo de error uniforme
-  if (!response.ok) {
-    const text = await response.text();
-    let body: any;
-    try { body = JSON.parse(text); } catch { body = text; }
-    const err: any = new Error(`HTTP ${response.status} ${response.statusText}`);
-    err.status = response.status;
-    err.body = body;
-    throw err;
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
   }
-
-  if (response.status === 204) return undefined as unknown as T;
-  
-  const data = await response.json();
-  return data as T;
 }
 
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers: { "Content-Type": "application/json" },
+  })
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status} ${res.statusText}`)
+  return res.json()
+}
+
+/** Lo que acepta PATCH /api/cinemas/:id */
+export type CinemaUpdate = Partial<
+  Pick<Cinema, "name" | "location" | "address" | "generator" | "cameraEnabled" | "cameraIp" | "upsEnabled" | "upsIp">
+> & { rackComponents?: RackComponent[] }
+
 export const api = {
-  // Cinemas
   getCinemas: () => request<Cinema[]>("/api/cinemas"),
   getCinema: (id: string) => request<Cinema>(`/api/cinemas/${id}`),
-  updateCinema: (id: string, payload: Partial<Cinema>) =>
-  request<Cinema>(`/api/cinemas/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }),
-  deleteCinema: (id: string) => request<void>(`/api/cinemas/${id}`, { method: "DELETE" }),
-
-  // utilitarios (si los necesitas)
-  raw: (path: string, opts?: RequestInit) => request<any>(path, opts),
-};
+  updateCinema: (id: string, changes: CinemaUpdate) =>
+    request<Cinema>(`/api/cinemas/${id}`, { method: "PATCH", body: JSON.stringify(changes) }),
+}

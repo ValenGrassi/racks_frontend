@@ -1,164 +1,97 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { ArrowLeft, FileText, User, Calendar, Search } from "lucide-react"
+import { useEffect, useState } from "react"
+import { History } from "lucide-react"
+import { EmptyState } from "@/components/ui/panel"
+import { Tag } from "@/components/ui/status"
+import { getLogs, type LogEntry } from "@/lib/activity-log"
+import { formatDate, formatTime, type Tone } from "@/lib/rack"
+import { PageLayout } from "./page-layout"
 
-interface LogEntry {
-  id: string
-  action: string
-  cinema: string
-  user: string
-  timestamp: string
-  details: string
+const ACTION_TONES: Record<string, Tone> = {
+  "editar rack": "accent",
+  "crear rack": "ok",
+  "eliminar componente": "critical",
 }
 
-interface LogsPageProps {
-  onBack: () => void
-}
+/** "Usuario Admin" → "UA" */
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0]?.toUpperCase() ?? "")
+    .join("")
 
-export function LogsPage({ onBack }: LogsPageProps) {
+/** Últimas 10 modificaciones guardadas en este navegador, agrupadas por día. */
+export function LogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([])
 
+  // localStorage solo existe en el navegador
   useEffect(() => {
-    // Load logs from localStorage
-    const storedLogs = JSON.parse(localStorage.getItem("rackLogs") || "[]")
-    setLogs(storedLogs)
+    setLogs(getLogs())
   }, [])
 
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString("es-ES", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    })
-  }
+  const latest = [...logs].sort((a, b) => b.timestamp.localeCompare(a.timestamp)).slice(0, 10)
 
-  const getActionColor = (action: string) => {
-    switch (action.toLowerCase()) {
-      case "editar rack":
-        return "bg-blue-100 text-blue-800"
-      case "crear rack":
-        return "bg-green-100 text-green-800"
-      case "eliminar componente":
-        return "bg-red-100 text-red-800"
-      case "cargar excel":
-        return "bg-purple-100 text-purple-800"
-      default:
-        return "bg-gray-100 text-gray-800"
-    }
+  const days: [string, LogEntry[]][] = []
+  for (const log of latest) {
+    const day = formatDate(log.timestamp)
+    const group = days.find(([d]) => d === day)
+    if (group) group[1].push(log)
+    else days.push([day, [log]])
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-8 flex items-center gap-4">
-          <Button variant="outline" onClick={onBack} className="flex items-center gap-2 bg-transparent cursor-pointer">
-            <ArrowLeft className="h-4 w-4" />
-            Volver
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Registro de Actividades</h1>
-            <p className="text-gray-600 mt-1">Historial de todas las modificaciones realizadas en el sistema</p>
-          </div>
+    <PageLayout
+      eyebrow="Auditoría"
+      title="Registro de actividad"
+      subtitle="Historial de las modificaciones realizadas en el sistema."
+      meta={
+        <span className="text-[12.5px] text-fg-3">
+          Últimos {latest.length} de un total de {logs.length} registros · guardados en este navegador
+        </span>
+      }
+    >
+      {latest.length === 0 ? (
+        <div className="max-w-4xl rounded-2xl border border-dashed border-line-2">
+          <EmptyState icon={<History />} title="Todavía no hay actividad">
+            No hay registros de actividad disponibles. Los cambios guardados en el editor de racks aparecen acá.
+          </EmptyState>
         </div>
-
-        {/* Search and Stats */}
-        {/* <div className="mb-6 space-y-4">
-          
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-blue-600">{logs.length}</div>
-                <div className="text-sm text-gray-600">Total de Registros</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-green-600">
-                  {logs.filter((log) => log.action.includes("Editar")).length}
-                </div>
-                <div className="text-sm text-gray-600">Ediciones</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-purple-600">
-                  {logs.filter((log) => log.action.includes("Excel")).length}
-                </div>
-                <div className="text-sm text-gray-600">Cargas de Excel</div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-4">
-                <div className="text-2xl font-bold text-orange-600">{new Set(logs.map((log) => log.user)).size}</div>
-                <div className="text-sm text-gray-600">Usuarios Activos</div>
-              </CardContent>
-            </Card>
-          </div>
-        </div> */}
-
-        {/* Logs List */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              Registro de Actividades
-            </CardTitle>
-            <CardDescription>
-              Últimos 10 de un total de {logs.length} registros
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {logs.length === 0 ? (
-              <div className="text-center py-12">
-                <FileText className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-500">
-                  {logs.length === 0
-                    ? "No hay registros de actividad disponibles"
-                    : "No se encontraron registros que coincidan con tu búsqueda"}
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) // orden descendente (más nuevos primero)
-                    .slice(0, 10) // solo los primeros 10
-                    .map((log) => (
-                  <div key={log.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <Badge className={getActionColor(log.action)}>{log.action}</Badge>
-                          <span className="font-medium text-gray-900">{log.cinema}</span>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2">{log.details}</p>
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          <div className="flex items-center gap-1">
-                            <User className="h-3 w-3" />
-                            {log.user}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Calendar className="h-3 w-3" />
-                            {formatDate(log.timestamp)}
-                          </div>
-                        </div>
+      ) : (
+        <div className="glass max-w-4xl overflow-hidden rounded-2xl">
+          {days.map(([day, entries], i) => (
+            <section key={day} className={i > 0 ? "border-t border-line" : undefined}>
+              <h2 className="border-b border-line bg-subtle px-5 py-2 text-[12px] font-medium text-fg-3">{day}</h2>
+              <ol className="divide-y divide-line">
+                {entries.map((log) => (
+                  <li
+                    key={log.id}
+                    className="grid gap-x-5 gap-y-1.5 px-5 py-3.5 transition-colors hover:bg-muted sm:grid-cols-[64px_minmax(0,1fr)_auto] sm:items-center"
+                  >
+                    <time dateTime={log.timestamp} className="font-mono text-[12px] text-fg-3 tabular-nums">
+                      {formatTime(log.timestamp)}
+                    </time>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Tag tone={ACTION_TONES[log.action.toLowerCase()] ?? "neutral"}>{log.action}</Tag>
+                        <span className="text-[13.5px] font-medium text-fg">{log.cinema}</span>
                       </div>
+                      <p className="mt-0.5 text-[13px] text-fg-3">{log.details}</p>
                     </div>
-                  </div>
+                    <span className="flex items-center gap-2 text-[12.5px] text-fg-2">
+                      <span className="flex size-5 items-center justify-center rounded-full bg-muted text-[9px] font-semibold text-fg-3">
+                        {initials(log.user)}
+                      </span>
+                      {log.user}
+                    </span>
+                  </li>
                 ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-    </div>
+              </ol>
+            </section>
+          ))}
+        </div>
+      )}
+    </PageLayout>
   )
 }

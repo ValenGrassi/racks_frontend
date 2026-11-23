@@ -1,18 +1,11 @@
-import styles from '../Loader.module.css';
+import { cn } from "@/lib/utils"
 
-export function Loader() {
+/** Arco que gira, para esperas cortas */
+export function Spinner({ className }: { className?: string }) {
   return (
-    <div className={styles.card}>
-      <div className={styles.loader}>
-        <p>Cargando</p>
-        <div className={styles.words}>
-          <span className={styles.word}>cines</span>
-          <span className={styles.word}>ups</span>
-          <span className={styles.word}>switches</span>
-          <span className={styles.word}>routers</span>
-          <span className={styles.word}>patcheras</span>
-        </div>
-      </div>
-    </div>
-  );
+    <svg className={cn("size-5 animate-spin text-current", className)} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9.5" stroke="currentColor" strokeOpacity="0.18" strokeWidth="2" />
+      <path d="M21.5 12a9.5 9.5 0 0 0-9.5-9.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  )
 }

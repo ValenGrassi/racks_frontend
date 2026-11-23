@@ -1,123 +1,343 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import "tailwindcss";
+@import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* ════════════════════════════════════════════════════════════════════
+   SAR · Design system "Cristal nocturno"
+   Paneles de cristal sobre un fondo azul noche. El tema oscuro es el predeterminado;
+   el claro es la misma idea con cristal blanco (clase .light en <html>).
+   Todas las clases de Tailwind (bg-surface, text-fg-3, border-line…) sirven para los dos temas.
+   ════════════════════════════════════════════════════════════════════ */
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+@custom-variant dark (&:where(.dark, .dark *));
+@custom-variant light (&:where(.light, .light *));
+
+/* ── Tema oscuro (predeterminado) ────────────────────────────────── */
+:root,
+.dark {
+  color-scheme: dark;
+
+  /* Fondo: azul noche con dos resplandores suaves arriba */
+  --canvas: #060a14;
+  --canvas-glow:
+    radial-gradient(900px 520px at 12% -8%, rgb(56 105 220 / 0.36), transparent 62%),
+    radial-gradient(760px 480px at 96% 2%, rgb(40 78 170 / 0.24), transparent 60%);
+
+  /* Cristal */
+  --surface: rgb(255 255 255 / 0.04); /* paneles */
+  --surface-2: rgb(255 255 255 / 0.065); /* botones secundarios, elementos elevados */
+  --subtle: rgb(255 255 255 / 0.03); /* campos, zonas hundidas */
+  --muted: rgb(255 255 255 / 0.06); /* hover, pistas de barras */
+  --elevated: rgb(14 21 38 / 0.94); /* menús, modales y avisos (casi opacos) */
+  --glass-highlight: rgb(255 255 255 / 0.06);
+  --glass-shadow: 0 24px 60px -30px rgb(0 0 0 / 0.6);
+
+  /* Líneas */
+  --line: rgb(255 255 255 / 0.085);
+  --line-2: rgb(255 255 255 / 0.15);
+
+  /* Texto */
+  --fg: #f2f5fb;
+  --fg-2: #b6c0d4;
+  --fg-3: #7d8aa6;
+  --fg-4: #4f5b76;
+
+  /* Acento */
+  --accent: #7aa7ff;
+  --accent-ink: #9cbcff;
+  --accent-wash: rgb(122 167 255 / 0.12);
+  --accent-line: rgb(122 167 255 / 0.35);
+  --primary-bg: linear-gradient(180deg, #8fb5ff, #5f8ff0);
+  --primary-bg-hover: linear-gradient(180deg, #a0c0ff, #6d99f2);
+  --primary-fg: #08122b;
+  --primary-glow: 0 10px 26px -10px rgb(122 167 255 / 0.85), inset 0 1px 0 rgb(255 255 255 / 0.5);
+
+  /* Estados */
+  --ok: #4ade80;
+  --ok-ink: #4ade80;
+  --ok-wash: rgb(74 222 128 / 0.1);
+  --warning: #fbbf24;
+  --warning-ink: #fbbf24;
+  --warning-wash: rgb(251 191 36 / 0.1);
+  --critical: #f87171;
+  --critical-ink: #f87171;
+  --critical-wash: rgb(248 113 113 / 0.12);
+  --info: #c4b5fd;
+  --info-ink: #c4b5fd;
+  --info-wash: rgb(196 181 253 / 0.12);
+
+  /* Gráficos */
+  --chart-1: #7aa7ff;
+  --chart-2: #3b5ea8;
+  --chart-3: #4f5b76;
+
+  /* Hardware (rack, cámara, frente de puertos) */
+  --rack: rgb(255 255 255 / 0.025);
+  --rack-2: rgb(255 255 255 / 0.05);
+  --rack-line: rgb(255 255 255 / 0.08);
+  --rack-text: #f2f5fb;
+  --rack-muted: #7d8aa6;
+
+  --overlay: rgb(2 5 12 / 0.6);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
+/* ── Tema claro: cristal blanco sobre un fondo celeste muy suave ─── */
+.light {
+  color-scheme: light;
+
+  --canvas: #edf1f8;
+  --canvas-glow:
+    radial-gradient(900px 520px at 12% -8%, rgb(122 167 255 / 0.32), transparent 62%),
+    radial-gradient(760px 480px at 96% 2%, rgb(160 190 255 / 0.3), transparent 60%);
+
+  --surface: rgb(255 255 255 / 0.62);
+  --surface-2: rgb(255 255 255 / 0.85);
+  --subtle: rgb(255 255 255 / 0.7);
+  --muted: rgb(15 23 42 / 0.05);
+  --elevated: rgb(255 255 255 / 0.95);
+  --glass-highlight: rgb(255 255 255 / 0.8);
+  --glass-shadow: 0 18px 44px -26px rgb(30 50 100 / 0.28);
+
+  --line: rgb(15 23 42 / 0.09);
+  --line-2: rgb(15 23 42 / 0.16);
+
+  --fg: #0b1220;
+  --fg-2: #3b4659;
+  --fg-3: #64718a;
+  --fg-4: #97a2b8;
+
+  --accent: #3b6fe0;
+  --accent-ink: #2f5fcc;
+  --accent-wash: rgb(59 111 224 / 0.1);
+  --accent-line: rgb(59 111 224 / 0.3);
+  --primary-bg: linear-gradient(180deg, #5b8cf5, #2f62d8);
+  --primary-bg-hover: linear-gradient(180deg, #6b97f6, #3a6be0);
+  --primary-fg: #ffffff;
+  --primary-glow: 0 10px 24px -12px rgb(47 98 216 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.3);
+
+  --ok: #16a34a;
+  --ok-ink: #15803d;
+  --ok-wash: rgb(22 163 74 / 0.1);
+  --warning: #d97706;
+  --warning-ink: #b45309;
+  --warning-wash: rgb(217 119 6 / 0.1);
+  --critical: #dc2626;
+  --critical-ink: #b91c1c;
+  --critical-wash: rgb(220 38 38 / 0.09);
+  --info: #7c3aed;
+  --info-ink: #6d28d9;
+  --info-wash: rgb(124 58 237 / 0.09);
+
+  --chart-1: #3b6fe0;
+  --chart-2: #9bbcf7;
+  --chart-3: #c3cbd9;
+
+  /* En claro el rack es un equipo oscuro dentro del cristal blanco */
+  --rack: #0e1526;
+  --rack-2: rgb(255 255 255 / 0.06);
+  --rack-line: rgb(255 255 255 / 0.09);
+
+  --overlay: rgb(15 23 42 / 0.35);
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-subtle: var(--subtle);
   --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
+  --color-elevated: var(--elevated);
+  --color-line: var(--line);
+  --color-line-2: var(--line-2);
+  --color-fg: var(--fg);
+  --color-fg-2: var(--fg-2);
+  --color-fg-3: var(--fg-3);
+  --color-fg-4: var(--fg-4);
+
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-accent-ink: var(--accent-ink);
+  --color-accent-wash: var(--accent-wash);
+  --color-accent-line: var(--accent-line);
+
+  --color-ok: var(--ok);
+  --color-ok-ink: var(--ok-ink);
+  --color-ok-wash: var(--ok-wash);
+  --color-warning: var(--warning);
+  --color-warning-ink: var(--warning-ink);
+  --color-warning-wash: var(--warning-wash);
+  --color-critical: var(--critical);
+  --color-critical-ink: var(--critical-ink);
+  --color-critical-wash: var(--critical-wash);
+  --color-info: var(--info);
+  --color-info-ink: var(--info-ink);
+  --color-info-wash: var(--info-wash);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-rack: var(--rack);
+  --color-rack-2: var(--rack-2);
+  --color-rack-line: var(--rack-line);
+  --color-rack-text: var(--rack-text);
+  --color-rack-muted: var(--rack-muted);
+
+  --color-overlay: var(--overlay);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+}
+
+@theme {
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 18px;
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.06);
+  --shadow-lg: 0 24px 60px -24px rgb(0 0 0 / 0.55), 0 8px 20px -10px rgb(0 0 0 / 0.25);
+
+  --ease-out-quick: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --animate-enter: enter 0.36s var(--ease-out-quick) both;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  --animate-toast: toast-in 0.28s var(--ease-out-quick) both;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 130% 0;
+    }
+    to {
+      background-position: -130% 0;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+}
+
+/* Panel de cristal: fondo translúcido, borde fino, desenfoque y un brillo en el borde superior */
+@utility glass {
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(22px) saturate(1.1);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+}
+
+/* Capa elevada (menús, modales, avisos): casi opaca para que se lea sobre cualquier fondo */
+@utility glass-elevated {
+  background-color: var(--elevated);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(24px) saturate(1.2);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-lg);
+}
+
+/* Botón principal: degradé azul con brillo */
+@utility btn-primary {
+  background-image: var(--primary-bg);
+  color: var(--primary-fg);
+  box-shadow: var(--primary-glow);
+}
+
+/* Etiqueta técnica en mayúsculas: "U07 · SWITCH" */
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+
+/* Bloque de carga con un brillo que se desplaza */
+@utility skeleton {
+  border-radius: 8px;
+  background-image: linear-gradient(90deg, var(--line) 0%, var(--line-2) 50%, var(--line) 100%);
+  background-size: 260% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Cuadrícula de fondo muy tenue (login, 404) */
+@utility bg-grid {
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+@utility scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    border-color: var(--line);
   }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    background-color: var(--canvas);
+  }
+  /* El color de fondo lo pone <html>; el body queda transparente para que se vea el resplandor de abajo */
   body {
-    @apply bg-background text-foreground;
+    color: var(--fg);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+  /* Resplandor azul del fondo en una capa fija propia: no se repinta al hacer scroll
+     y los paneles de cristal siempre tienen algo real que desenfocar detrás */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background: var(--canvas-glow);
+    pointer-events: none;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 30%, transparent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
 }
+
+/* Al cambiar de tema se cortan las transiciones, así todo cambia de una vez */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* fin del design system */
